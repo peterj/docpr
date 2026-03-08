@@ -1,7 +1,6 @@
 name: "docpr sync"
 description: >
-  Analyzes merged PR code changes using Claude and automatically creates a PR
-  in your documentation repository if any updates are needed.
+  Analyzes merged PR code changes and automatically updates documentation, if needed.
 
 branding:
   icon: "book-open"
