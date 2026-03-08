@@ -1,0 +1,57 @@
+name: "docpr sync"
+description: >
+  Analyzes merged PR code changes using Claude and automatically creates a PR
+  in your documentation repository if any updates are needed.
+
+branding:
+  icon: "book-open"
+  color: "purple"
+
+inputs:
+  anthropic_api_key:
+    description: "Anthropic API key for Claude"
+    required: true
+
+  docs_repo:
+    description: "Documentation repository in the format 'owner/repo'"
+    required: true
+
+  docs_repo_token:
+    description: >
+      GitHub token with read/write access to the documentation repository.
+      Needs 'contents: write' and 'pull-requests: write' permissions.
+    required: true
+
+  docs_base_branch:
+    description: "Base branch in the docs repo to branch from and PR into"
+    required: false
+    default: "main"
+
+  docs_path:
+    description: "Subdirectory within the docs repo to search for documentation (e.g. 'docs/' or 'content/')"
+    required: false
+    default: ""
+
+  source_repo_token:
+    description: "GitHub token for reading the source (current) repository. Defaults to github.token."
+    required: false
+    default: ${{ github.token }}
+
+  model:
+    description: "Claude model to use"
+    required: false
+    default: "claude-opus-4-5"
+
+  max_doc_files:
+    description: "Maximum number of doc files to fetch and analyze (to control token usage)"
+    required: false
+    default: "20"
+
+  pr_label:
+    description: "Label to apply to the created documentation PR"
+    required: false
+    default: "docpr"
+
+runs:
+  using: "node20"
+  main: "dist/index.js"

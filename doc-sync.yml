@@ -1,0 +1,61 @@
+# .github/workflows/doc-sync.yml
+#
+# Add this file to your SOURCE repository (the repo containing code).
+# It will run whenever a PR is merged and automatically create a PR
+# in your documentation repository if any docs need updating.
+
+name: docpr
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  sync-docs:
+    # Only run on merged PRs (not closed-without-merge)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # Read source repo contents
+
+    steps:
+      - name: Sync documentation
+        uses: your-org/docpr@v1     # ← replace with published action
+        with:
+          # ── Required ──────────────────────────────────────────────
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # The repository that holds your documentation
+          docs_repo: "your-org/your-docs-repo"   # ← replace with your docs repo
+
+          # A GitHub token (PAT or App token) with write access to the docs repo.
+          # Needs: contents:write, pull-requests:write
+          docs_repo_token: ${{ secrets.DOCS_REPO_TOKEN }}
+
+          # ── Optional ──────────────────────────────────────────────
+          # Branch in the docs repo to target (default: main)
+          # docs_base_branch: main
+
+          # Narrow Claude's search to a subdirectory in the docs repo
+          # docs_path: docs/
+
+          # Label applied to generated PRs (created automatically if missing)
+          # pr_label: docpr
+
+          # Claude model to use (default: claude-opus-4-5)
+          # model: claude-opus-4-5
+
+          # Max number of doc files to consider per run (controls cost)
+          # max_doc_files: "20"
+
+      - name: Report result
+        if: always()
+        run: |
+          PR_URL="${{ steps.sync-docs.outputs.docs_pr_url }}"
+          FILES="${{ steps.sync-docs.outputs.updated_files }}"
+          if [ -n "$PR_URL" ]; then
+            echo "📄 Documentation PR created: $PR_URL"
+            echo "   Updated files: $FILES"
+          else
+            echo "✅ No documentation updates needed."
+          fi
