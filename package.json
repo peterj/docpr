@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "GitHub Action that uses Claude to keep documentation in sync with code changes",
   "main": "dist/index.js",
-  "type": "module",
   "scripts": {
     "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
     "dev": "tsx src/index.ts",
