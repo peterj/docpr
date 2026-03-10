@@ -7,9 +7,18 @@ branding:
   color: "purple"
 
 inputs:
+  llm_provider:
+    description: "LLM provider to use: 'anthropic' or 'openai'"
+    required: false
+    default: "anthropic"
+
   anthropic_api_key:
-    description: "Anthropic API key for Claude"
-    required: true
+    description: "Anthropic API key (required when llm_provider is 'anthropic')"
+    required: false
+
+  openai_api_key:
+    description: "OpenAI API key (required when llm_provider is 'openai')"
+    required: false
 
   docs_repo:
     description: "Documentation repository in the format 'owner/repo'"
@@ -37,9 +46,9 @@ inputs:
     default: ${{ github.token }}
 
   model:
-    description: "Claude model to use"
+    description: "LLM model to use. Defaults to 'claude-opus-4-5' for Anthropic and 'gpt-4o' for OpenAI."
     required: false
-    default: "claude-opus-4-5"
+    default: ""
 
   max_doc_files:
     description: "Maximum number of doc files to fetch and analyze (to control token usage)"

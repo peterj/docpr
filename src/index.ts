@@ -1,13 +1,15 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import Anthropic from "@anthropic-ai/sdk";
 
+import { createLLMClient, DEFAULT_MODELS, type LLMProvider } from "./llm";
 import { getPRDiff } from "./github/getPRDiff";
 import { getDocFiles } from "./github/getDocFiles";
 import { createDocsPR } from "./github/createDocsPR";
-import { analyzePRChanges } from "./claude/analyzePRChanges";
-import { identifyRelevantDocs } from "./claude/identifyRelevantDocs";
-import { generateDocUpdates } from "./claude/generateDocUpdates";
+import { analyzePRChanges } from "./analysis/analyzePRChanges";
+import { identifyRelevantDocs } from "./analysis/identifyRelevantDocs";
+import { generateDocUpdates } from "./analysis/generateDocUpdates";
+
+const SUPPORTED_PROVIDERS = new Set<string>(["anthropic", "openai"]);
 
 async function run(): Promise<void> {
   try {
@@ -32,13 +34,33 @@ async function run(): Promise<void> {
       return;
     }
 
-    const anthropicKey = core.getInput("anthropic_api_key", { required: true });
+    const provider = (
+      core.getInput("llm_provider") || "anthropic"
+    ).trim().toLowerCase();
+    if (!SUPPORTED_PROVIDERS.has(provider)) {
+      core.setFailed(
+        `Unsupported llm_provider: "${provider}". Supported: anthropic, openai.`
+      );
+      return;
+    }
+    const llmProvider = provider as LLMProvider;
+
+    const apiKey = resolveApiKey(llmProvider);
+    if (!apiKey) {
+      core.setFailed(
+        `No API key provided for provider "${llmProvider}". ` +
+          `Set the ${llmProvider === "anthropic" ? "anthropic_api_key" : "openai_api_key"} input.`
+      );
+      return;
+    }
+
     const docsRepo = core.getInput("docs_repo", { required: true });
     const docsToken = core.getInput("docs_repo_token", { required: true });
     const sourceToken = core.getInput("source_repo_token", { required: true });
     const docsBaseBranch = core.getInput("docs_base_branch") || "main";
     const docsPath = core.getInput("docs_path") || "";
-    const model = core.getInput("model") || "claude-opus-4-5";
+    const model =
+      core.getInput("model") || DEFAULT_MODELS[llmProvider];
     const maxDocFiles = parseInt(core.getInput("max_doc_files") || "20", 10);
     const prLabel = core.getInput("pr_label") || "docpr";
 
@@ -52,7 +74,7 @@ async function run(): Promise<void> {
 
     const sourceOctokit = github.getOctokit(sourceToken);
     const docsOctokit = github.getOctokit(docsToken);
-    const anthropic = new Anthropic({ apiKey: anthropicKey });
+    const llm = createLLMClient(llmProvider, apiKey);
 
     const sourceOwner = context.repo.owner;
     const sourceRepoName = context.repo.repo;
@@ -63,6 +85,7 @@ async function run(): Promise<void> {
     core.info(
       `Processing merged PR #${prNumber}: "${prTitle}" in ${sourceOwner}/${sourceRepoName}`
     );
+    core.info(`Using LLM provider: ${llmProvider}, model: ${model}`);
 
     // Step 1: Fetch PR diff
     core.startGroup("Step 1 — Fetching PR diff");
@@ -81,9 +104,9 @@ async function run(): Promise<void> {
     }
 
     // Step 2: Analyze what changed
-    core.startGroup("Step 2 — Analyzing PR changes with Claude");
+    core.startGroup("Step 2 — Analyzing PR changes");
     const changeAnalysis = await analyzePRChanges({
-      anthropic,
+      llm,
       model,
       prTitle,
       prBody: pr.body || "",
@@ -117,7 +140,7 @@ async function run(): Promise<void> {
     // Step 4: Identify which docs are relevant
     core.startGroup("Step 4 — Identifying relevant documentation files");
     const relevantPaths = await identifyRelevantDocs({
-      anthropic,
+      llm,
       model,
       changeAnalysis,
       docFilePaths: docFiles.map((f) => f.path),
@@ -129,7 +152,7 @@ async function run(): Promise<void> {
 
     if (relevantPaths.length === 0) {
       core.info(
-        "Claude determined that no documentation files need updating. Done."
+        "LLM determined that no documentation files need updating. Done."
       );
       core.setOutput("docs_pr_url", "");
       core.setOutput("updated_files", "[]");
@@ -160,9 +183,9 @@ async function run(): Promise<void> {
     core.endGroup();
 
     // Step 6: Generate documentation updates
-    core.startGroup("Step 6 — Generating documentation updates with Claude");
+    core.startGroup("Step 6 — Generating documentation updates");
     const updates = await generateDocUpdates({
-      anthropic,
+      llm,
       model,
       prTitle,
       prBody: pr.body || "",
@@ -170,12 +193,12 @@ async function run(): Promise<void> {
       changeAnalysis,
       relevantDocs,
     });
-    core.info(`Claude proposed updates to ${updates.length} file(s).`);
+    core.info(`LLM proposed updates to ${updates.length} file(s).`);
     core.endGroup();
 
     if (updates.length === 0) {
       core.info(
-        "Claude reviewed the docs and decided no changes were necessary. Done."
+        "LLM reviewed the docs and decided no changes were necessary. Done."
       );
       core.setOutput("docs_pr_url", "");
       core.setOutput("updated_files", "[]");
@@ -211,6 +234,17 @@ async function run(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : "";
     core.setFailed(`Action failed: ${message}\n${stack}`);
+  }
+}
+
+function resolveApiKey(provider: LLMProvider): string {
+  switch (provider) {
+    case "anthropic":
+      return core.getInput("anthropic_api_key");
+    case "openai":
+      return core.getInput("openai_api_key");
+    default:
+      return "";
   }
 }
 

@@ -1,22 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
-import { analyzePRChanges } from "../claude/analyzePRChanges";
+import { analyzePRChanges } from "../analysis/analyzePRChanges";
+import type { LLMClient } from "../llm";
 
-function createMockAnthropic(responseText: string) {
+function createMockLLM(responseText: string): LLMClient {
   return {
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [{ type: "text", text: responseText }],
-      }),
-    },
-  } as any;
+    chat: vi.fn().mockResolvedValue(responseText),
+  };
 }
 
 describe("analyzePRChanges", () => {
-  it("returns Claude's text response", async () => {
-    const anthropic = createMockAnthropic("## Summary\nAdded a new endpoint.");
+  it("returns the LLM text response", async () => {
+    const llm = createMockLLM("## Summary\nAdded a new endpoint.");
 
     const result = await analyzePRChanges({
-      anthropic,
+      llm,
       model: "claude-opus-4-5",
       prTitle: "Add /users endpoint",
       prBody: "Adds CRUD for users",
@@ -26,84 +23,39 @@ describe("analyzePRChanges", () => {
     expect(result).toBe("## Summary\nAdded a new endpoint.");
   });
 
-  it("passes correct parameters to Claude", async () => {
-    const anthropic = createMockAnthropic("analysis");
+  it("passes correct parameters to the LLM", async () => {
+    const llm = createMockLLM("analysis");
 
     await analyzePRChanges({
-      anthropic,
+      llm,
       model: "claude-sonnet-4-20250514",
       prTitle: "Fix bug",
       prBody: "Fixes #123",
       diff: "-old\n+new",
     });
 
-    const call = anthropic.messages.create.mock.calls[0][0];
+    const call = (llm.chat as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(call.model).toBe("claude-sonnet-4-20250514");
-    expect(call.max_tokens).toBe(2048);
+    expect(call.maxTokens).toBe(2048);
     expect(call.system).toContain("senior software engineer");
     expect(call.messages[0].content).toContain("Fix bug");
     expect(call.messages[0].content).toContain("Fixes #123");
     expect(call.messages[0].content).toContain("-old\n+new");
   });
 
-  it("joins multiple text blocks with newline", async () => {
-    const anthropic = {
-      messages: {
-        create: vi.fn().mockResolvedValue({
-          content: [
-            { type: "text", text: "Part 1" },
-            { type: "text", text: "Part 2" },
-          ],
-        }),
-      },
-    } as any;
-
-    const result = await analyzePRChanges({
-      anthropic,
-      model: "claude-opus-4-5",
-      prTitle: "Test",
-      prBody: "",
-      diff: "diff",
-    });
-
-    expect(result).toBe("Part 1\nPart 2");
-  });
-
-  it("filters out non-text content blocks", async () => {
-    const anthropic = {
-      messages: {
-        create: vi.fn().mockResolvedValue({
-          content: [
-            { type: "text", text: "Real analysis" },
-            { type: "tool_use", id: "x", name: "y", input: {} },
-          ],
-        }),
-      },
-    } as any;
-
-    const result = await analyzePRChanges({
-      anthropic,
-      model: "claude-opus-4-5",
-      prTitle: "Test",
-      prBody: "",
-      diff: "diff",
-    });
-
-    expect(result).toBe("Real analysis");
-  });
-
   it("uses placeholder when prBody is empty", async () => {
-    const anthropic = createMockAnthropic("result");
+    const llm = createMockLLM("result");
 
     await analyzePRChanges({
-      anthropic,
+      llm,
       model: "claude-opus-4-5",
       prTitle: "Test",
       prBody: "",
       diff: "diff content",
     });
 
-    const content = anthropic.messages.create.mock.calls[0][0].messages[0].content;
+    const content = (llm.chat as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .messages[0].content;
     expect(content).toContain("(no description provided)");
   });
 });

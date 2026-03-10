@@ -1,5 +1,5 @@
 import type { GitHub } from "@actions/github/lib/utils";
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMClient } from "./llm";
 
 export type Octokit = InstanceType<typeof GitHub>;
 
@@ -53,7 +53,7 @@ export interface CreateDocsPRParams {
 }
 
 export interface AnalyzePRChangesParams {
-  anthropic: Anthropic;
+  llm: LLMClient;
   model: string;
   prTitle: string;
   prBody: string;
@@ -61,14 +61,14 @@ export interface AnalyzePRChangesParams {
 }
 
 export interface IdentifyRelevantDocsParams {
-  anthropic: Anthropic;
+  llm: LLMClient;
   model: string;
   changeAnalysis: string;
   docFilePaths: string[];
 }
 
 export interface GenerateDocUpdatesParams {
-  anthropic: Anthropic;
+  llm: LLMClient;
   model: string;
   prTitle: string;
   prBody: string;
