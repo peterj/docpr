@@ -36,7 +36,7 @@ async function run(): Promise<void> {
 
     const provider = (
       core.getInput("llm_provider") || "anthropic"
-    ).toLowerCase();
+    ).trim().toLowerCase();
     if (!SUPPORTED_PROVIDERS.has(provider)) {
       core.setFailed(
         `Unsupported llm_provider: "${provider}". Supported: anthropic, openai.`
