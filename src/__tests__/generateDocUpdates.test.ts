@@ -2,16 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 import {
   generateDocUpdates,
   stripCodeFence,
-} from "../claude/generateDocUpdates";
+} from "../analysis/generateDocUpdates";
+import type { LLMClient } from "../llm";
 
-function createMockAnthropic(responses: string[]) {
-  const create = vi.fn();
+function createMockLLM(responses: string[]): LLMClient {
+  const chat = vi.fn();
   for (const text of responses) {
-    create.mockResolvedValueOnce({
-      content: [{ type: "text", text }],
-    });
+    chat.mockResolvedValueOnce(text);
   }
-  return { messages: { create } } as any;
+  return { chat };
 }
 
 describe("stripCodeFence", () => {
@@ -53,13 +52,13 @@ describe("generateDocUpdates", () => {
   };
 
   it("returns updates for docs that need changes", async () => {
-    const anthropic = createMockAnthropic([
+    const llm = createMockLLM([
       "# Updated API\nNew widget section\n",
     ]);
 
     const result = await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         {
           path: "docs/api.md",
@@ -76,15 +75,15 @@ describe("generateDocUpdates", () => {
     expect(result[0].reason).toBe("Updated to reflect code changes");
   });
 
-  it("skips docs where Claude returns NO_CHANGES_NEEDED", async () => {
-    const anthropic = createMockAnthropic([
+  it("skips docs where LLM returns NO_CHANGES_NEEDED", async () => {
+    const llm = createMockLLM([
       "NO_CHANGES_NEEDED",
       "# Updated guide\n",
     ]);
 
     const result = await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         {
           path: "docs/api.md",
@@ -104,13 +103,13 @@ describe("generateDocUpdates", () => {
   });
 
   it("skips docs where response contains NO_CHANGES_NEEDED", async () => {
-    const anthropic = createMockAnthropic([
+    const llm = createMockLLM([
       "After review, NO_CHANGES_NEEDED for this file.",
     ]);
 
     const result = await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         {
           path: "docs/api.md",
@@ -126,11 +125,11 @@ describe("generateDocUpdates", () => {
   it("warns when updated content is significantly shorter", async () => {
     const originalContent = "x".repeat(500);
     const shortUpdate = "y".repeat(100);
-    const anthropic = createMockAnthropic([shortUpdate]);
+    const llm = createMockLLM([shortUpdate]);
 
     const result = await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         {
           path: "docs/api.md",
@@ -145,11 +144,11 @@ describe("generateDocUpdates", () => {
   });
 
   it("does not warn for short original documents", async () => {
-    const anthropic = createMockAnthropic(["# Short\n"]);
+    const llm = createMockLLM(["# Short\n"]);
 
     const result = await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         {
           path: "docs/short.md",
@@ -163,14 +162,14 @@ describe("generateDocUpdates", () => {
     expect(result[0].reason).toBe("Updated to reflect code changes");
   });
 
-  it("strips code fences from Claude's response", async () => {
-    const anthropic = createMockAnthropic([
+  it("strips code fences from LLM response", async () => {
+    const llm = createMockLLM([
       "```markdown\n# Updated\nContent\n```",
     ]);
 
     const result = await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         {
           path: "docs/guide.md",
@@ -185,14 +184,14 @@ describe("generateDocUpdates", () => {
   });
 
   it("returns empty array when all docs need no changes", async () => {
-    const anthropic = createMockAnthropic([
+    const llm = createMockLLM([
       "NO_CHANGES_NEEDED",
       "NO_CHANGES_NEEDED",
     ]);
 
     const result = await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         { path: "docs/a.md", content: "# A\n", sha: "s1" },
         { path: "docs/b.md", content: "# B\n", sha: "s2" },
@@ -202,12 +201,12 @@ describe("generateDocUpdates", () => {
     expect(result).toEqual([]);
   });
 
-  it("sends correct prompt to Claude for each doc", async () => {
-    const anthropic = createMockAnthropic(["# Updated\n"]);
+  it("sends correct prompt to the LLM for each doc", async () => {
+    const llm = createMockLLM(["# Updated\n"]);
 
     await generateDocUpdates({
       ...baseParams,
-      anthropic,
+      llm,
       relevantDocs: [
         {
           path: "docs/api.md",
@@ -217,7 +216,7 @@ describe("generateDocUpdates", () => {
       ],
     });
 
-    const call = anthropic.messages.create.mock.calls[0][0];
+    const call = (llm.chat as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(call.system).toContain("expert technical writer");
     expect(call.messages[0].content).toContain("Add widget API");
     expect(call.messages[0].content).toContain("docs/api.md");

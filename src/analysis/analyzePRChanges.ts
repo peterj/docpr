@@ -1,15 +1,15 @@
 import type { AnalyzePRChangesParams } from "../types";
 
 export async function analyzePRChanges({
-  anthropic,
+  llm,
   model,
   prTitle,
   prBody,
   diff,
 }: AnalyzePRChangesParams): Promise<string> {
-  const message = await anthropic.messages.create({
+  return llm.chat({
     model,
-    max_tokens: 2048,
+    maxTokens: 2048,
     system: `You are a senior software engineer analyzing pull requests to help keep documentation up to date.
 Your task is to produce a clear, structured analysis of what changed in a pull request.
 Focus on changes that could affect documentation: new features, changed APIs, updated behavior,
@@ -44,9 +44,4 @@ Be concise but thorough. If a section has no relevant changes, write "None."`,
       },
     ],
   });
-
-  return message.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
 }

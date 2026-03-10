@@ -1,8 +1,8 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMClient } from "../llm";
 import type { GenerateDocUpdatesParams, DocFileWithContent, DocUpdate } from "../types";
 
 export async function generateDocUpdates({
-  anthropic,
+  llm,
   model,
   prTitle,
   prBody,
@@ -14,7 +14,7 @@ export async function generateDocUpdates({
 
   for (const doc of relevantDocs) {
     const result = await updateSingleDoc({
-      anthropic,
+      llm,
       model,
       prTitle,
       prBody,
@@ -32,7 +32,7 @@ export async function generateDocUpdates({
 }
 
 async function updateSingleDoc({
-  anthropic,
+  llm,
   model,
   prTitle,
   prBody,
@@ -40,7 +40,7 @@ async function updateSingleDoc({
   changeAnalysis,
   doc,
 }: {
-  anthropic: Anthropic;
+  llm: LLMClient;
   model: string;
   prTitle: string;
   prBody: string;
@@ -48,10 +48,11 @@ async function updateSingleDoc({
   changeAnalysis: string;
   doc: DocFileWithContent;
 }): Promise<DocUpdate | null> {
-  const message = await anthropic.messages.create({
-    model,
-    max_tokens: 4096,
-    system: `You are an expert technical writer updating documentation to reflect code changes.
+  const responseText = (
+    await llm.chat({
+      model,
+      maxTokens: 4096,
+      system: `You are an expert technical writer updating documentation to reflect code changes.
 
 Rules:
 - Preserve all existing content, formatting, and style unless it specifically needs updating.
@@ -61,10 +62,10 @@ Rules:
 - Maintain the existing document structure, headings hierarchy, and tone.
 - If the document does not need any changes, respond with exactly: NO_CHANGES_NEEDED
 - Otherwise, respond with the complete updated file contents, nothing else.`,
-    messages: [
-      {
-        role: "user",
-        content: `Update the documentation file below to reflect the code changes from a merged PR.
+      messages: [
+        {
+          role: "user",
+          content: `Update the documentation file below to reflect the code changes from a merged PR.
 
 ## Merged PR
 - **Title**: ${prTitle}
@@ -81,15 +82,10 @@ ${doc.content}
 
 Provide the complete updated contents of \`${doc.path}\` with only the necessary changes applied.
 If no changes are needed, respond with exactly: NO_CHANGES_NEEDED`,
-      },
-    ],
-  });
-
-  const responseText = message.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
+        },
+      ],
+    })
+  ).trim();
 
   if (
     responseText === "NO_CHANGES_NEEDED" ||
